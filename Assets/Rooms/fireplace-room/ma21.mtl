@@ -1,0 +1,112 @@
+# Wavefront MTL
+# Created by fragMOTION
+# http://www.fragmosoft.com
+
+newmtl 4258_mtl
+illum 2
+d 1
+ka 1 1 1
+kd 1 1 1
+ks 1 1 1
+ke 0 0 0
+ns 40
+map_Kd 4258.tga
+newmtl 4260_mtl
+illum 2
+d 1
+ka 1 1 1
+kd 1 1 1
+ks 1 1 1
+ke 0 0 0
+ns 40
+map_Kd 4260.tga
+newmtl 4263_mtl
+illum 2
+d 1
+ka 1 1 1
+kd 1 1 1
+ks 1 1 1
+ke 0 0 0
+ns 40
+map_Kd 4263.tga
+newmtl 4256_mtl
+illum 2
+d 1
+ka 1 1 1
+kd 1 1 1
+ks 1 1 1
+ke 0 0 0
+ns 40
+map_Kd 4256.tga
+newmtl 4257_mtl
+illum 2
+d 1
+ka 1 1 1
+kd 1 1 1
+ks 1 1 1
+ke 0 0 0
+ns 40
+map_Kd 4257.tga
+newmtl 4261_mtl
+illum 2
+d 1
+ka 1 1 1
+kd 1 1 1
+ks 1 1 1
+ke 0 0 0
+ns 40
+map_Kd 4261.tga
+newmtl 4264_mtl
+illum 2
+d 1
+ka 1 1 1
+kd 1 1 1
+ks 1 1 1
+ke 0 0 0
+ns 40
+map_Kd 4264.tga
+newmtl 4267_mtl
+illum 2
+d 1
+ka 1 1 1
+kd 1 1 1
+ks 1 1 1
+ke 0 0 0
+ns 40
+map_Kd 4267.tga
+newmtl 4268_mtl
+illum 2
+d 1
+ka 1 1 1
+kd 1 1 1
+ks 1 1 1
+ke 0 0 0
+ns 40
+map_Kd 4268.tga
+newmtl 4269_mtl
+illum 2
+d 1
+ka 1 1 1
+kd 1 1 1
+ks 1 1 1
+ke 0 0 0
+ns 40
+map_Kd 4269.tga
+newmtl 4203alpha_mtl
+illum 2
+d 0.08
+ka 1 1 1
+kd 1 1 1
+ks 1 1 1
+ke 0 0 0
+ns 40
+map_Kd 4203.tga
+newmtl 4270alpha_mtl
+illum 2
+d 0.08
+ka 1 1 1
+kd 1 1 1
+ks 1 1 1
+ke 0 0 0
+ns 40
+map_Kd 4270.tga
