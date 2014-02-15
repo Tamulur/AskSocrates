@@ -26,7 +26,7 @@ public class CameraControlTwoPerspectives : MonoBehaviour
 		public bool is3rdPersonOffsetLeft { get; set; }
 		
 		const float kZoomDuration = 0.5f;
-		const float kSwooshDuration = 0.6f;
+		const float kSwooshDuration = 1.5f;
 	
 		const float kMinY = -90;
 		const float kMaxY = 80;
@@ -251,7 +251,7 @@ public class CameraControlTwoPerspectives : MonoBehaviour
 		Go.to ( cameraMainPivotTransform, kSwooshDuration, new GoTweenConfig().
 																position(cameraAnchorRootTransform.position).
 																rotation(cameraAnchorRootTransform.rotation).
-																setEaseType( GoEaseType.SineIn).
+																setEaseType( GoEaseType.SineInOut).
 																onComplete( t => OnSwooshedToCharacter()));
 
 			Vector3 targetLocalPosition = thirdPersonOffset;
@@ -259,7 +259,7 @@ public class CameraControlTwoPerspectives : MonoBehaviour
 					targetLocalPosition.x = -thirdPersonOffset.x;
 		Go.to( ownTransform, kSwooshDuration, new GoTweenConfig().
 														localPosition( targetLocalPosition ).
-														setEaseType(GoEaseType.SineIn));
+														setEaseType(GoEaseType.SineInOut));
 		
 		if ( OnPerspectiveChange != null )
 			OnPerspectiveChange( PerspectiveEvent.SwooshToCharacter );
