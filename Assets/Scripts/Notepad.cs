@@ -61,8 +61,8 @@ public class Notepad : MonoBehaviour
 	
 	void Update()
 	{
-			if ( inputEnabled )
-		ProcessInput();
+		if ( inputEnabled && Singletons.gameManager.isGameStarted )
+			ProcessInput();
 	}
 	
 	

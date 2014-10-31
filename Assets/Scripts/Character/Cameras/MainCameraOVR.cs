@@ -10,8 +10,6 @@ public class MainCameraOVR : MainCameraBase
 		Vignetting leftVignette;
 		Vignetting rightVignette;
 
-		OVRCameraController ovrCameraController;
-
 
 	
 			float _vignette = 0;
@@ -49,13 +47,11 @@ public class MainCameraOVR : MainCameraBase
 	
 	void Awake()
 	{
-		leftCamera = transform.Find("CameraLeft").camera;
-		rightCamera = transform.Find("CameraRight").camera;
+		leftCamera = transform.Find("LeftEyeAnchor").camera;
+		rightCamera = transform.Find("RightEyeAnchor").camera;
 		
 		leftVignette = leftCamera.GetComponent<Vignetting>();
 		rightVignette = rightCamera.GetComponent<Vignetting>();
-
-		ovrCameraController = GetComponent<OVRCameraController>();
 
 		originalLayerMask = leftCamera.cullingMask;
 		originalFov = leftCamera.fieldOfView;
@@ -64,13 +60,6 @@ public class MainCameraOVR : MainCameraBase
 	
 	
 	
-	public override void Dispossess()
-	{
-		ovrCameraController.FollowOrientation = transform;
-	}
-
-
-
 	public override void HideHead()
 	{
 		leftCamera.cullingMask &= ~(Layers.Mask(Layers.Layer.PlayerHead));
@@ -79,13 +68,6 @@ public class MainCameraOVR : MainCameraBase
 
 
 	
-	public override void InitializeForNewCharacter(Transform characterRootTransform)
-	{
-		ovrCameraController.FollowOrientation = characterRootTransform;
-	}
-
-
-
 	public override bool IsVR()
 	{
 		return true;

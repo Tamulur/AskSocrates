@@ -25,8 +25,8 @@ public class CameraControlTwoPerspectives : MonoBehaviour
 		public float sensitivityY = 1.0f;
 		public bool is3rdPersonOffsetLeft { get; set; }
 		
-		const float kZoomDuration = 0.5f;
-		const float kSwooshDuration = 1.5f;
+		const float kZoomDuration = 0.2f;
+		const float kSwooshDuration = 0.8f;
 	
 		const float kMinY = -90;
 		const float kMaxY = 80;
@@ -35,8 +35,8 @@ public class CameraControlTwoPerspectives : MonoBehaviour
 		const float kMaxX = 70;
 		
 		Transform ownTransform;
-		Transform cameraLeftTransform;
-		Transform cameraRightTransform;
+		Transform ovrXform;
+		Transform eyeCenterXform;
 		Transform cameraAnchorRootTransform;
 		Transform cameraMainPivotTransform;
 		Transform cameraVerticalPivotTransform;
@@ -91,10 +91,9 @@ public class CameraControlTwoPerspectives : MonoBehaviour
 		
 		Singletons.player .OnPlayerEvent += OnPlayerEvent;
 		
-		Transform ovrControllerTransform = ownTransform.Find("OVRCameraController");
-		mainCamera = ovrControllerTransform.GetComponent<MainCameraOVR>();
-		cameraLeftTransform = ovrControllerTransform.Find("CameraLeft");
-		cameraRightTransform = ovrControllerTransform.Find("CameraRight");
+		ovrXform = FindObjectOfType<OVRCameraRig>().transform;
+		eyeCenterXform = GameObject.Find("CenterEyeAnchor").transform;
+		mainCamera = ovrXform.GetComponent<MainCameraOVR>();
 		swooshSound = ownTransform.Find("SwooshSound").GetComponent<AudioSource>();
 		
 		zoom = 0;
@@ -161,13 +160,9 @@ public class CameraControlTwoPerspectives : MonoBehaviour
 
 	public Vector3 GetLookTarget ()
 	{
-		Vector3 lookTarget = Vector3.zero;
-		
-			bool lookAtCameras = state == State.FirstPerson;
-		if ( lookAtCameras )
-			lookTarget = 0.5f * ( cameraLeftTransform.position + cameraRightTransform.position );
-		else
-			lookTarget = head .eyeCenter;
+				bool lookAtCameras = state == State.FirstPerson;
+		Vector3 lookTarget = lookAtCameras	? eyeCenterXform.position
+																: head .eyeCenter;
 			
 		return lookTarget;			
 	}	
@@ -251,15 +246,16 @@ public class CameraControlTwoPerspectives : MonoBehaviour
 		Go.to ( cameraMainPivotTransform, kSwooshDuration, new GoTweenConfig().
 																position(cameraAnchorRootTransform.position).
 																rotation(cameraAnchorRootTransform.rotation).
-																setEaseType( GoEaseType.SineInOut).
+																//setEaseType( GoEaseType.SineIn).
 																onComplete( t => OnSwooshedToCharacter()));
 
 			Vector3 targetLocalPosition = thirdPersonOffset;
 				if ( is3rdPersonOffsetLeft )
 					targetLocalPosition.x = -thirdPersonOffset.x;
-		Go.to( ownTransform, kSwooshDuration, new GoTweenConfig().
-														localPosition( targetLocalPosition ).
-														setEaseType(GoEaseType.SineInOut));
+		Go.to( ownTransform, kSwooshDuration, new GoTweenConfig()
+														.localPosition( targetLocalPosition )
+														//.setEaseType(GoEaseType.SineIn)
+														);
 		
 		if ( OnPerspectiveChange != null )
 			OnPerspectiveChange( PerspectiveEvent.SwooshToCharacter );
@@ -288,7 +284,7 @@ public class CameraControlTwoPerspectives : MonoBehaviour
 		SaveOriginalPositionsAndRotations ();
 		Go.to ( this, kZoomDuration, new GoTweenConfig().
 														floatProp ( "zoom", 0 ).
-														setEaseType( GoEaseType.Linear).
+														//setEaseType( GoEaseType.Linear).
 														onComplete( t => OnZoomedIntoFirstPerson()));
 		
 		if ( OnPerspectiveChange != null )
@@ -304,7 +300,7 @@ public class CameraControlTwoPerspectives : MonoBehaviour
 		SaveOriginalPositionsAndRotations ();
 		Go.to ( this, kZoomDuration, new GoTweenConfig().
 														floatProp ( "zoom", 1 ).
-		       											setEaseType( GoEaseType.Linear).
+														//setEaseType( GoEaseType.Linear).
 														onComplete( t => OnZoomedIntoThirdPerson()));
 		mainCamera.ShowHead();
 		

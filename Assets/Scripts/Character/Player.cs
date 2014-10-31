@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 
@@ -16,6 +17,7 @@ public class Player : MonoBehaviour
 		const float kChangeCharacterDuration = 0.2f;
 	
 		CameraControlTwoPerspectives cameraControl;
+		HoloGrid darkness;
 
 		readonly Transform[] characters = new Transform[2];
 		int characterIndex;
@@ -61,8 +63,9 @@ public class Player : MonoBehaviour
 		cameraControl = cameraPivotTransform.GetComponentInChildren<CameraControlTwoPerspectives>();
 			cameraControl.OnPerspectiveChange += OnPerspectiveChange;
 
-		cameraTransform = cameraControl.transform.Find("OVRCameraController");
+		cameraTransform = cameraControl.transform.Find("OVRCameraRig");
 		playerCamera = cameraTransform.GetComponent<MainCameraBase> ();
+		darkness = GameObject.Find("OVRCameraRig").transform.Find("CenterEyeAnchor/Darkness").GetComponent<HoloGrid>();
 	}
 
 	
@@ -86,6 +89,29 @@ public class Player : MonoBehaviour
 	}
 	
 	
+
+	public void FadeFromDark( Action onComplete, float duration=2 )
+	{
+		darkness.SetUseTransparentShader( true );
+
+		Singletons.soundManager.TweenVolumeTo(1, duration);
+		darkness.TweenTo( 0, duration: duration, onComplete: () => {	darkness.Deactivate();
+																										onComplete(); });
+	}
+
+
+
+	public void FadeToDark( Action onComplete )
+	{
+		darkness.SetUseTransparentShader( true );
+
+				const float kDuration = 2;
+		Singletons.soundManager.TweenVolumeTo(0, kDuration);
+		darkness.TweenTo( 1, duration: kDuration, onComplete: () => {	darkness.SetUseTransparentShader( false );
+																										onComplete(); });
+	}
+
+
 
 	public void InitializeForNewCharacter( int characterIndex )
 	{
@@ -135,10 +161,17 @@ public class Player : MonoBehaviour
 
 
 
+	public void SetToDark()
+	{
+		darkness.Activate( 1 );
+		darkness.SetUseTransparentShader( false );
+		Singletons.soundManager.volume = 0;
+	}	
+
+
+
 	void Start()
 	{
-		Screen.showCursor = false;
-
 		InitializeForNewCharacter( 0 );
 
 		ZoomIntoCharacter();
