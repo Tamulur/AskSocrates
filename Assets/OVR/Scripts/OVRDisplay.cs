@@ -94,8 +94,6 @@ public class OVRDisplay
 	/// </summary>
 	public OVRDisplay()
 	{
-		RecenterPose();
-
 #if !UNITY_ANDROID || UNITY_EDITOR
 		needsSetTexture = true;
         prevFullScreen = Screen.fullScreen;
@@ -306,6 +304,23 @@ public class OVRDisplay
 	public int GetEyeTextureId(OVREye eye)
 	{
 		return eyeTextureIds[currEyeTextureIdx + (int)eye];
+	}
+
+	/// <summary>
+	/// True if the direct mode display driver is active.
+	/// </summary>
+	public bool isDirectMode
+	{
+		get
+		{
+#if !UNITY_ANDROID || UNITY_EDITOR
+			uint caps = OVRManager.capiHmd.GetDesc().HmdCaps;
+			uint mask = caps & (uint)HmdCaps.ExtendDesktop;
+			return mask == 0;
+#else
+			return false;
+#endif
+		}
 	}
 
 	/// <summary>

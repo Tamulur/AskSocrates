@@ -20,7 +20,11 @@ limitations under the License.
 ************************************************************************************/
 
 // #define SHOW_DK2_VARIABLES
-// #define USE_NEW_GUI // You can use the Unity new GUI if you have Unity 4.6 or above.
+
+// Use the Unity new GUI with Unity 4.6 or above.
+#if UNITY_4_6 || UNITY_5_0
+#define USE_NEW_GUI
+#endif
 
 using System;
 using System.Collections;
@@ -214,9 +218,15 @@ public class OVRMainMenu : MonoBehaviour
 	        r.localPosition = new Vector3(0.01f, 0.17f, 0.53f);
 	        r.localEulerAngles = Vector3.zero;
 
-			Canvas c = NewGUIObject.AddComponent<Canvas>();        
+			Canvas c = NewGUIObject.AddComponent<Canvas>();
+#if (UNITY_5_0)
+			// TODO: Unity 5.0b11 has an older version of the new GUI being developed in Unity 4.6.
+			// Remove this once Unity 5 has a more recent merge of Unity 4.6.
 	        c.renderMode = RenderMode.World;
-	        c.pixelPerfect = false;            
+#else
+	        c.renderMode = RenderMode.WorldSpace;
+#endif
+	        c.pixelPerfect = false;
 #endif
     }
 	
@@ -225,7 +235,7 @@ public class OVRMainMenu : MonoBehaviour
 	/// </summary>
 	void Start()
 	{
-		AlphaFadeValue = 1.0f;	
+		AlphaFadeValue = 1.0f;
 		CurrentLevel   = 0;
 		PrevStartDown  = false;
 		PrevHatDown    = false;
@@ -820,9 +830,10 @@ public class OVRMainMenu : MonoBehaviour
         if (ShowVRVars == false)
             return;
 
-        int y = VRVarsSY;
+        
 
 #if !USE_NEW_GUI
+        int y = VRVarsSY;
 #if	SHOW_DK2_VARIABLES
 		// Print out Vision Mode
 		GuiHelper.StereoBox (VRVarsSX, y += StepY, VRVarsWidthX, VRVarsWidthY, 
@@ -927,7 +938,13 @@ public class OVRMainMenu : MonoBehaviour
         r.localEulerAngles = Vector3.zero;
         r.localScale = new Vector3(0.001f, 0.001f, 0.001f);
         Canvas c = RiftPresentGUIObject.AddComponent<Canvas>();
-        c.renderMode = RenderMode.World;
+#if UNITY_5_0
+		// TODO: Unity 5.0b11 has an older version of the new GUI being developed in Unity 4.6.
+	   	// Remove this once Unity 5 has a more recent merge of Unity 4.6.
+		c.renderMode = RenderMode.World;
+#else
+		c.renderMode = RenderMode.WorldSpace;
+#endif
         c.pixelPerfect = false;
         OVRUGUI.RiftPresentGUI(RiftPresentGUIObject);
 #endif

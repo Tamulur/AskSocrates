@@ -51,14 +51,14 @@ public class OVRGamepadController : MonoBehaviour
 	   	Y,
 	   	Up,
 	   	Down,
-	   	LeftShoulder,
-	   	RightShoulder,
+		Left,
+		Right,
 	   	Start,
 	   	Back,
 	   	LStick,
-	   	RStick,
-	   	L1,
-	   	R1,
+		RStick,
+		LeftShoulder,
+		RightShoulder,
 		Max
 	};
 
@@ -80,8 +80,8 @@ public class OVRGamepadController : MonoBehaviour
 		"Button Y",
 		"Up",
 		"Down",
-		"Left Shoulder",
-		"Right Shoulder",
+		"Left",
+		"Right",
 		"Start",
 		"Back",
 		"LStick",
@@ -238,14 +238,14 @@ public class OVRGamepadController : MonoBehaviour
 		GPC_GetAxis(Axis.RightXAxis), GPC_GetAxis(Axis.RightYAxis)));
 
 		// Button test
-		Debug.Log(string.Format("A:{0} B:{1} X:{2} Y:{3} U:{4} D:{5} L:{6} R:{7} SRT:{8} BK:{9} LS:{10} RS:{11} L1{12} R1{13}",
+		Debug.Log(string.Format("A:{0} B:{1} X:{2} Y:{3} U:{4} D:{5} L:{6} R:{7} SRT:{8} BK:{9} LS:{10} RS:{11} L1:{12} R1:{13}",
 		GPC_GetButton(Button.A), GPC_GetButton(Button.B),
 		GPC_GetButton(Button.X), GPC_GetButton(Button.Y),
 		GPC_GetButton(Button.Up), GPC_GetButton(Button.Down),
-		GPC_GetButton(Button.LeftShoulder), GPC_GetButton(Button.RightShoulder),
+		GPC_GetButton(Button.Left), GPC_GetButton(Button.Right),
 		GPC_GetButton(Button.Start), GPC_GetButton(Button.Back),
 		GPC_GetButton(Button.LStick), GPC_GetButton(Button.RStick),
-		GPC_GetButton(Button.L1), GPC_GetButton(Button.R1)));
+		GPC_GetButton(Button.LeftShoulder), GPC_GetButton(Button.RightShoulder)));
 	}
 
 #if !UNITY_ANDROID || UNITY_EDITOR
