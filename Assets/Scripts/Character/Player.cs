@@ -65,7 +65,7 @@ public class Player : MonoBehaviour
 
 		cameraTransform = cameraControl.transform.Find("OVRCameraRig");
 		playerCamera = cameraTransform.GetComponent<MainCameraBase> ();
-		darkness = GameObject.Find("OVRCameraRig").transform.Find("CenterEyeAnchor/Darkness").GetComponent<HoloGrid>();
+		darkness = GameObject.Find("OVRCameraRig").transform.Find("TrackingSpace/CenterEyeAnchor/Darkness").GetComponent<HoloGrid>();
 	}
 
 	

@@ -21,16 +21,13 @@ limitations under the License.
 
 using UnityEngine;
 using System;
+using System.Runtime.InteropServices;
 
 /// <summary>
 /// Matches the events in the native plugin.
 /// </summary>
 public enum RenderEventType
 {
-	// PC
-	BeginFrame = 0,
-	EndFrame = 1,
-
 	// Android
 	InitRenderThread = 0,
 	Pause = 1,
@@ -40,6 +37,10 @@ public enum RenderEventType
 	TimeWarp = 5,
 	PlatformUI = 6,
 	PlatformUIConfirmQuit = 7,
+	ResetVrModeParms = 8,
+	PlatformUITutorial = 9,
+	ShutdownRenderThread = 10,
+	BeginFrame = 11,
 }
 
 /// <summary>
@@ -47,6 +48,29 @@ public enum RenderEventType
 /// </summary>
 public static class OVRPluginEvent
 {
+	/// <summary>
+	/// The start of the numeric range used by event IDs.
+	/// </summary>
+	/// <description>
+	/// If multiple native rundering plugins are in use, the Oculus plugin's event IDs can be re-mapped to avoid conflicts.
+	/// 
+	/// Set this value so that it is higher than the highest event ID number used by your plugin.
+	/// Oculus plugin event IDs start at eventBase and end at eventBase plus the highest value in RenderEventType.
+	/// 
+	/// The bit IS_DATA_FLAG in the event ID is used to encode a data payload instead of an event, so you should not use
+	/// any event ID with that bit set.
+	/// </description>
+	public static int eventBase
+	{
+		get { return _eventBase; }
+		set
+		{
+			_eventBase = value;
+			OVR_SetEventBase(_eventBase);
+		}
+	}
+	private static int _eventBase = 0;
+
 	/// <summary>
 	/// Immediately issues the given event.
 	/// </summary>
@@ -94,7 +118,7 @@ public static class OVRPluginEvent
 
 	private static int EncodeType(int eventType)
 	{
-		return (int)((UInt32)eventType & ~IS_DATA_FLAG); // make sure upper bit is not set
+		return (int)((UInt32)(eventType + eventBase) & ~IS_DATA_FLAG); // make sure upper bit is not set
 	}
 
 	private static int EncodeData(int eventId, int eventData, int pos)
@@ -117,4 +141,7 @@ public static class OVRPluginEvent
 
 		return (int)payload;
 	}
+
+	[DllImport("OculusPlugin")]
+	private static extern int OVR_SetEventBase(int value);
 }

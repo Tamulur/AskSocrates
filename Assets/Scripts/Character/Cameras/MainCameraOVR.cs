@@ -47,8 +47,8 @@ public class MainCameraOVR : MainCameraBase
 	
 	void Awake()
 	{
-		leftCamera = transform.Find("LeftEyeAnchor").camera;
-		rightCamera = transform.Find("RightEyeAnchor").camera;
+		leftCamera = transform.Find("TrackingSpace/LeftEyeAnchor").camera;
+		rightCamera = transform.Find("TrackingSpace/RightEyeAnchor").camera;
 		
 		leftVignette = leftCamera.GetComponent<Vignetting>();
 		rightVignette = rightCamera.GetComponent<Vignetting>();

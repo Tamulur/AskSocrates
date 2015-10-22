@@ -9,6 +9,11 @@ Continue the dialogue until you have a revelation. Then press Escape to quit the
 May you be enlightened.
 
 
+By Tore Knabe
+http://tore-knabe.com/virtual-reality
+tamulur@yahoo.com
+
+
 Credits:
 
 Room: shprops4xnalara's "Fireplace Room" http://shprops4xnalara.deviantart.com/art/Silent-Hill-2-Fireplace-room-350324526 (Silent Hill)

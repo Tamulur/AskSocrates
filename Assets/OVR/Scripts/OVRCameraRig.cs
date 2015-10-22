@@ -19,8 +19,6 @@ limitations under the License.
 
 ************************************************************************************/
 
-//#define OVR_USE_PROJ_MATRIX
-
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -35,12 +33,15 @@ public class OVRCameraRig : MonoBehaviour
 	/// <summary>
 	/// The left eye camera.
 	/// </summary>
-	private Camera leftEyeCamera;
+	public Camera leftEyeCamera { get; private set; }
 	/// <summary>
 	/// The right eye camera.
 	/// </summary>
-	private Camera rightEyeCamera;
-
+	public Camera rightEyeCamera { get; private set; }
+	/// <summary>
+	/// Provides a root transform for all anchors in tracking space.
+	/// </summary>
+	public Transform trackingSpace { get; private set; }
 	/// <summary>
 	/// Always coincides with the pose of the left eye.
 	/// </summary>
@@ -53,8 +54,34 @@ public class OVRCameraRig : MonoBehaviour
 	/// Always coincides with the pose of the right eye.
 	/// </summary>
 	public Transform rightEyeAnchor { get; private set; }
+	/// <summary>
+	/// Always coincides with the pose of the left hand.
+	/// </summary>
+	public Transform leftHandAnchor { get; private set; }
+	/// <summary>
+	/// Always coincides with the pose of the right hand.
+	/// </summary>
+	public Transform rightHandAnchor { get; private set; }
+	/// <summary>
+	/// Always coincides with the pose of the tracker.
+	/// </summary>
+	public Transform trackerAnchor { get; private set; }
+	/// <summary>
+	/// Occurs when the eye pose anchors have been set.
+	/// </summary>
+	public event System.Action<OVRCameraRig> UpdatedAnchors;
 
-	private bool needsCameraConfigure;
+	private bool needsCameraConfigure = true;
+	private readonly string trackingSpaceName = "TrackingSpace";
+	private readonly string trackerAnchorName = "TrackerAnchor";
+	private readonly string eyeAnchorName = "EyeAnchor";
+	private readonly string handAnchorName = "HandAnchor";
+	private readonly string legacyEyeAnchorName = "Camera";
+	private Material mat;
+
+#if !UNITY_ANDROID || UNITY_EDITOR
+	private Camera mirrorCamera;
+#endif
 
 #region Unity Messages
 	private void Awake()
@@ -63,22 +90,32 @@ public class OVRCameraRig : MonoBehaviour
 		
 		if (!Application.isPlaying)
 			return;
-
-		needsCameraConfigure = true;
+		
+		OVRManager.Created += () => { needsCameraConfigure = true; };
+		OVRManager.NativeTextureScaleModified += (prev, current) => { needsCameraConfigure = true; };
+		OVRManager.VirtualTextureScaleModified += (prev, current) => { needsCameraConfigure = true; };
+		OVRManager.EyeTextureAntiAliasingModified += (prev, current) => { needsCameraConfigure = true; };
+		OVRManager.EyeTextureDepthModified += (prev, current) => { needsCameraConfigure = true; };
+		OVRManager.EyeTextureFormatModified += (prev, current) => { needsCameraConfigure = true; };
+		OVRManager.MonoscopicModified += (prev, current) => { needsCameraConfigure = true; };
+		OVRManager.HdrModified += (prev, current) => { needsCameraConfigure = true; };
 	}
 
 	private void Start()
 	{
-		EnsureGameObjectIntegrity();
+		if (Application.isPlaying)
+			OVRManager.display.UpdatedTracking += ApplyTracking;
 
-		if (!Application.isPlaying)
-			return;
-
-		UpdateCameras();
-		UpdateAnchors();
+		ApplyTracking();
 	}
 
-	private void LateUpdate()
+	private void OnDestroy()
+	{
+		if (Application.isPlaying)
+			OVRManager.display.UpdatedTracking -= ApplyTracking;
+	}
+
+	void ApplyTracking()
 	{
 		EnsureGameObjectIntegrity();
 		
@@ -89,50 +126,134 @@ public class OVRCameraRig : MonoBehaviour
 		UpdateAnchors();
 	}
 
+#if !UNITY_ANDROID || UNITY_EDITOR
+	void OnRenderImage(RenderTexture src, RenderTexture dst)
+	{
+		if (!OVRManager.display.mirrorMode || !OVRManager.instance.isVRPresent || leftEyeCamera.targetTexture == null)
+		{
+			Graphics.Blit(src, dst);
+			return;
+		}
+
+		Vector2 scale = Vector2.one;
+		Vector2 offset = Vector2.zero;
+		
+		// Correct the texture's aspect ratio to match the viewport.
+		float texAspect = (float)leftEyeCamera.targetTexture.width / (float)leftEyeCamera.targetTexture.height;
+		float screenAspect = (float)Screen.width / (float)Screen.height;
+		float aspect = screenAspect / texAspect;
+		
+		if (aspect < 1f)
+		{
+			scale.x = aspect;
+			offset.x = -0.5f * (aspect - 1f);
+		}
+		else
+		{
+			scale.y = 1f/aspect;
+			offset.y = -0.5f * (1f/aspect - 1f);
+		}
+
+		float virtualScale = OVRPlugin.virtualTextureScale;
+
+		// Apply render scaling.
+		scale *= virtualScale;
+		offset *= virtualScale;
+		
+		// Flip vertically.
+		offset.y = 1f - virtualScale + offset.y;
+
+		if (!mat)
+			mat = new Material(Shader.Find("Oculus/BlitCopy"));
+
+		mat.SetTextureScale("_MainTex", scale);
+		mat.SetTextureOffset("_MainTex", offset);
+
+		Graphics.Blit(leftEyeCamera.targetTexture, dst, mat);
+	}
+#endif
+
 #endregion
 
 	private void UpdateAnchors()
 	{
-		OVRPose leftEye = OVRManager.display.GetEyePose(OVREye.Left);
-		OVRPose rightEye = OVRManager.display.GetEyePose(OVREye.Right);
+		if (!OVRManager.instance.isVRPresent)
+			return;
 
-		leftEyeAnchor.localRotation = leftEye.orientation;
-		centerEyeAnchor.localRotation = leftEye.orientation; // using left eye for now
-		rightEyeAnchor.localRotation = rightEye.orientation;
+		bool monoscopic = OVRManager.instance.monoscopic;
 
-		leftEyeAnchor.localPosition = leftEye.position;
-		centerEyeAnchor.localPosition = 0.5f * (leftEye.position + rightEye.position);
-		rightEyeAnchor.localPosition = rightEye.position;
+		OVRPose tracker = OVRManager.tracker.GetPose(0f);
+		OVRPose leftHand = OVRPlugin.GetNodePose(OVRPlugin.Node.LeftHand).ToOVRPose();
+		OVRPose rightHand = OVRPlugin.GetNodePose(OVRPlugin.Node.RightHand).ToOVRPose();
+		OVRPose hmdLeftEye = OVRManager.display.GetEyePose(OVREye.Left);
+		OVRPose hmdRightEye = OVRManager.display.GetEyePose(OVREye.Right);
+
+		trackerAnchor.localRotation = tracker.orientation;
+		leftHandAnchor.localRotation = leftHand.orientation;
+		rightHandAnchor.localRotation = rightHand.orientation;
+		centerEyeAnchor.localRotation = hmdLeftEye.orientation; // using left eye for now
+		leftEyeAnchor.localRotation = monoscopic ? centerEyeAnchor.localRotation : hmdLeftEye.orientation;
+		rightEyeAnchor.localRotation = monoscopic ? centerEyeAnchor.localRotation : hmdRightEye.orientation;
+
+		trackerAnchor.localPosition = tracker.position;
+		leftHandAnchor.localPosition = leftHand.position;
+		rightHandAnchor.localPosition = rightHand.position;
+		centerEyeAnchor.localPosition = 0.5f * (hmdLeftEye.position + hmdRightEye.position);
+		leftEyeAnchor.localPosition = monoscopic ? centerEyeAnchor.localPosition : hmdLeftEye.position;
+		rightEyeAnchor.localPosition = monoscopic ? centerEyeAnchor.localPosition : hmdRightEye.position;
+
+		if (UpdatedAnchors != null)
+		{
+			UpdatedAnchors(this);
+		}
 	}
 
 	private void UpdateCameras()
 	{
+		if (!OVRManager.instance.isVRPresent)
+			return;
+
 		if (needsCameraConfigure)
 		{
 			leftEyeCamera = ConfigureCamera(OVREye.Left);
 			rightEyeCamera = ConfigureCamera(OVREye.Right);
 
 #if !UNITY_ANDROID || UNITY_EDITOR
-
-#if OVR_USE_PROJ_MATRIX
-			OVRManager.display.ForceSymmetricProj(false);
-#else
-			OVRManager.display.ForceSymmetricProj(true);
-#endif
+			if (Application.isPlaying)
+			{
+				mirrorCamera.cullingMask = 0;
+				mirrorCamera.renderingPath = RenderingPath.Forward;
+				mirrorCamera.targetTexture = null;
+				mirrorCamera.tag = "";
+			}
 
 			needsCameraConfigure = false;
 #endif
 		}
 	}
 
-	private void EnsureGameObjectIntegrity()
+	public void EnsureGameObjectIntegrity()
 	{
+		if (trackingSpace == null)
+			trackingSpace = ConfigureRootAnchor(trackingSpaceName);
+
 		if (leftEyeAnchor == null)
-			leftEyeAnchor = ConfigureEyeAnchor(OVREye.Left);
+			leftEyeAnchor = ConfigureEyeAnchor(trackingSpace, OVREye.Left);
+
 		if (centerEyeAnchor == null)
-			centerEyeAnchor = ConfigureEyeAnchor(OVREye.Center);
+			centerEyeAnchor = ConfigureEyeAnchor(trackingSpace, OVREye.Center);
+
 		if (rightEyeAnchor == null)
-			rightEyeAnchor = ConfigureEyeAnchor(OVREye.Right);
+			rightEyeAnchor = ConfigureEyeAnchor(trackingSpace, OVREye.Right);
+
+		if (leftHandAnchor == null)
+            leftHandAnchor = ConfigureHandAnchor(trackingSpace, OVRPlugin.Node.LeftHand);
+
+		if (rightHandAnchor == null)
+            rightHandAnchor = ConfigureHandAnchor(trackingSpace, OVRPlugin.Node.RightHand);
+
+		if (trackerAnchor == null)
+			trackerAnchor = ConfigureTrackerAnchor(trackingSpace);
 
 		if (leftEyeCamera == null)
 		{
@@ -141,6 +262,12 @@ public class OVRCameraRig : MonoBehaviour
 			{
 				leftEyeCamera = leftEyeAnchor.gameObject.AddComponent<Camera>();
 			}
+#if UNITY_ANDROID && !UNITY_EDITOR
+			if (leftEyeCamera.GetComponent<OVRPostRender>() == null)
+			{
+				leftEyeCamera.gameObject.AddComponent<OVRPostRender>();
+			}
+#endif
 		}
 
 		if (rightEyeCamera == null)
@@ -150,24 +277,110 @@ public class OVRCameraRig : MonoBehaviour
 			{
 				rightEyeCamera = rightEyeAnchor.gameObject.AddComponent<Camera>();
 			}
+#if UNITY_ANDROID && !UNITY_EDITOR
+			if (rightEyeCamera.GetComponent<OVRPostRender>() == null)
+			{
+				rightEyeCamera.gameObject.AddComponent<OVRPostRender>();
+			}
+#endif
 		}
+
+#if !UNITY_ANDROID || UNITY_EDITOR
+		if (Application.isPlaying && mirrorCamera == null)
+		{
+			mirrorCamera = GetComponent<Camera>();
+			if (mirrorCamera == null)
+				mirrorCamera = gameObject.AddComponent<Camera>();
+		}
+#endif
 	}
 
-	private Transform ConfigureEyeAnchor(OVREye eye)
+	private Transform ConfigureRootAnchor(string name)
 	{
-		string name = eye.ToString() + "EyeAnchor";
-		Transform anchor = transform.Find(name);
+		Transform root = transform.Find(name);
+
+		if (root == null)
+		{
+			root = new GameObject(name).transform;
+		}
+
+		root.parent = transform;
+		root.localScale = Vector3.one;
+		root.localPosition = Vector3.zero;
+		root.localRotation = Quaternion.identity;
+
+		return root;
+	}
+
+	private Transform ConfigureEyeAnchor(Transform root, OVREye eye)
+	{
+		string name = eye.ToString() + eyeAnchorName;
+		Transform anchor = transform.Find(root.name + "/" + name);
 
 		if (anchor == null)
 		{
-			string oldName = "Camera" + eye.ToString();
-			anchor = transform.Find(oldName);
+			anchor = transform.Find(name);
 		}
 
 		if (anchor == null)
-			anchor = new GameObject(name).transform;
+		{
+			string legacyName = legacyEyeAnchorName + eye.ToString();
+			anchor = transform.Find(legacyName);
+		}
 
-		anchor.parent = transform;
+		if (anchor == null)
+		{
+			anchor = new GameObject(name).transform;
+		}
+
+		anchor.name = name;
+		anchor.parent = root;
+		anchor.localScale = Vector3.one;
+		anchor.localPosition = Vector3.zero;
+		anchor.localRotation = Quaternion.identity;
+
+		return anchor;
+	}
+
+	private Transform ConfigureTrackerAnchor(Transform root)
+	{
+		string name = trackerAnchorName;
+		Transform anchor = transform.Find(root.name + "/" + name);
+
+		if (anchor == null)
+		{
+			anchor = new GameObject(name).transform;
+		}
+
+		anchor.parent = root;
+		anchor.localScale = Vector3.one;
+		anchor.localPosition = Vector3.zero;
+		anchor.localRotation = Quaternion.identity;
+
+		return anchor;
+	}
+
+	private Transform ConfigureHandAnchor(Transform root, OVRPlugin.Node hand)
+	{
+		if (hand != OVRPlugin.Node.LeftHand && hand != OVRPlugin.Node.RightHand)
+			return null;
+
+		string handName = (hand == OVRPlugin.Node.LeftHand) ? "Left" : "Right";
+		string name = handName + handAnchorName;
+		Transform anchor = transform.Find(root.name + "/" + name);
+
+		if (anchor == null)
+		{
+			anchor = transform.Find(name);
+		}
+
+		if (anchor == null)
+		{
+			anchor = new GameObject(name).transform;
+		}
+
+		anchor.name = name;
+		anchor.parent = root;
 		anchor.localScale = Vector3.one;
 		anchor.localPosition = Vector3.zero;
 		anchor.localRotation = Quaternion.identity;
@@ -184,18 +397,40 @@ public class OVRCameraRig : MonoBehaviour
 
 		cam.fieldOfView = eyeDesc.fov.y;
 		cam.aspect = eyeDesc.resolution.x / eyeDesc.resolution.y;
-		cam.rect = new Rect(0f, 0f, OVRManager.instance.virtualTextureScale, OVRManager.instance.virtualTextureScale);
 		cam.targetTexture = OVRManager.display.GetEyeTexture(eye);
+		cam.hdr = OVRManager.instance.hdr;
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+		// Enforce camera render order
+		cam.depth = (eye == OVREye.Left) ?
+				(int)RenderEventType.LeftEyeEndFrame :
+				(int)RenderEventType.RightEyeEndFrame;
+
+		// If we don't clear the color buffer with a glClear, tiling GPUs
+		// will be forced to do an "unresolve" and read back the color buffer information.
+		// The clear is free on PowerVR, and possibly Mali, but it is a performance cost
+		// on Adreno, and we would be better off if we had the ability to discard/invalidate
+		// the color buffer instead of clearing.
+
+		// NOTE: The color buffer is not being invalidated in skybox mode, forcing an additional,
+		// wasted color buffer read before the skybox is drawn.
+		bool hasSkybox = ((cam.clearFlags == CameraClearFlags.Skybox) &&
+		                 ((cam.gameObject.GetComponent<Skybox>() != null) || (RenderSettings.skybox != null)));
+		cam.clearFlags = (hasSkybox) ? CameraClearFlags.Skybox : CameraClearFlags.SolidColor;
+#else
+		float vs = OVRManager.instance.virtualTextureScale;
+		cam.rect = new Rect(0f, 1f - vs, vs, vs);
+#endif
+
+		// When rendering monoscopic, we will use the left camera render for both eyes.
+		if (eye == OVREye.Right)
+		{
+			cam.enabled = !OVRManager.instance.monoscopic;
+		}
 
 		// AA is documented to have no effect in deferred, but it causes black screens.
 		if (cam.actualRenderingPath == RenderingPath.DeferredLighting)
-			QualitySettings.antiAliasing = 0;
-
-#if !UNITY_ANDROID || UNITY_EDITOR
-#if OVR_USE_PROJ_MATRIX
-		cam.projectionMatrix = OVRManager.display.GetProjection((int)eye, cam.nearClipPlane, cam.farClipPlane);
-#endif
-#endif
+			OVRManager.instance.eyeTextureAntiAliasing = OVRManager.RenderTextureAntiAliasing._1;
 
 		return cam;
 	}
