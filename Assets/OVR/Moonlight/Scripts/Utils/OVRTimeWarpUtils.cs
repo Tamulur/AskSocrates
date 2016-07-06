@@ -1,15 +1,15 @@
-﻿/************************************************************************************
+/************************************************************************************
 
 Copyright   :   Copyright 2014 Oculus VR, LLC. All Rights reserved.
 
-Licensed under the Oculus VR Rift SDK License Version 3.2 (the "License");
+Licensed under the Oculus VR Rift SDK License Version 3.3 (the "License");
 you may not use the Oculus VR Rift SDK except in compliance with the License,
 which is provided at the time of installation or download, or which
 otherwise accompanies this software in either electronic or hard copy form.
 
 You may obtain a copy of the License at
 
-http://www.oculusvr.com/licenses/LICENSE-3.2
+http://www.oculus.com/licenses/LICENSE-3.3
 
 Unless required by applicable law or agreed to in writing, the Oculus VR SDK
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -33,16 +33,16 @@ public class OVRTimeWarpUtils
 
 	public enum DebugPerfMode
 	{
-		DEBUG_PERF_OFF,         // data still being collected, just not displayed
-		DEBUG_PERF_RUNNING,     // display continuously changing graph
-		DEBUG_PERF_FROZEN,      // no new data collection, but displayed
+		DEBUG_PERF_OFF = 0,         // data still being collected, just not displayed
+		DEBUG_PERF_RUNNING = 1,     // display continuously changing graph
+		DEBUG_PERF_FROZEN = 2,      // no new data collection, but displayed
 		DEBUG_PERF_MAX,
 	}
 
 	public enum DebugPerfValue
 	{
-		DEBUG_VALUE_DRAW,       // start and end times of the draw
-		DEBUG_VALUE_LATENCY,    // seconds from eye buffer orientation time
+		DEBUG_VALUE_DRAW = 0,       // display the start and end times of the draw
+		DEBUG_VALUE_LATENCY = 1,    // display the latency times (seconds from eye buffer orientation time)
 		DEBUG_VALUE_MAX,
 	}
 

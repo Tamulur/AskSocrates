@@ -2,14 +2,14 @@
 
 Copyright   :   Copyright 2014 Oculus VR, LLC. All Rights reserved.
 
-Licensed under the Oculus VR Rift SDK License Version 3.2 (the "License");
+Licensed under the Oculus VR Rift SDK License Version 3.3 (the "License");
 you may not use the Oculus VR Rift SDK except in compliance with the License,
 which is provided at the time of installation or download, or which
 otherwise accompanies this software in either electronic or hard copy form.
 
 You may obtain a copy of the License at
 
-http://www.oculusvr.com/licenses/LICENSE-3.2
+http://www.oculus.com/licenses/LICENSE-3.3
 
 Unless required by applicable law or agreed to in writing, the Oculus VR SDK
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,8 +19,8 @@ limitations under the License.
 
 ************************************************************************************/
 
-#if !UNITY_4_6
-#error Oculus Utilities require Unity 4.6.
+#if !UNITY_4_6 && !UNITY_4_7
+#error Oculus Utilities require Unity 4.6 or newer.
 #endif
 
 using System;
@@ -107,6 +107,35 @@ public class OVRManager : MonoBehaviour
 		}
 	}
 
+	private Camera[] disabledCameras;
+	float prevTimeScale;
+	private bool paused
+	{
+		get { return disabledCameras != null; }
+		set {
+			if (value == paused)
+				return;
+
+			if (value)
+			{
+				prevTimeScale = Time.timeScale;
+				Time.timeScale = 0.01f;
+				disabledCameras = GameObject.FindObjectsOfType<Camera> ();
+				foreach (var cam in disabledCameras)
+					cam.enabled = false;
+			}
+			else
+			{
+				Time.timeScale = prevTimeScale;
+				if (disabledCameras != null) {
+					foreach (var cam in disabledCameras)
+						cam.enabled = true;
+				}
+				disabledCameras = null;
+			}
+		}
+	}
+
 	/// <summary>
 	/// Occurs when an HMD attached.
 	/// </summary>
@@ -118,12 +147,12 @@ public class OVRManager : MonoBehaviour
 	public static event Action HMDLost;
 
 	/// <summary>
-	/// Occurs when the tracker gained tracking.
+	/// Occurs when the sensor gained tracking.
 	/// </summary>
 	public static event Action TrackingAcquired;
 
 	/// <summary>
-	/// Occurs when the tracker lost tracking.
+	/// Occurs when the sensor lost tracking.
 	/// </summary>
 	public static event Action TrackingLost;
 	
@@ -347,6 +376,11 @@ public class OVRManager : MonoBehaviour
     public bool isSupportedPlatform { get; private set; }
 	
 	/// <summary>
+	/// True if the user is currently wearing the display.
+	/// </summary>
+	public bool isUserPresent { get { return OVRPlugin.userPresent; } }
+
+	/// <summary>
 	/// True if the runtime is installed, a VR display is present, and VR is supported in the current configuration.
 	/// </summary>
 	public bool isVRPresent { get { return _isVRPresent; } private set { _isVRPresent = value; } }
@@ -417,6 +451,9 @@ public class OVRManager : MonoBehaviour
 	{
 		Debug.Log( "VrApiEventDefaultDelegate: " + eventData );
 	}
+
+	private Camera umbraInitializerCamera;
+
 #else
 	private static bool ovrIsInitialized;
 	private static bool isQuitting;
@@ -643,6 +680,14 @@ public class OVRManager : MonoBehaviour
 #endif
 	}
 
+#if UNITY_ANDROID && !UNITY_EDITOR
+	void OnLevelWasLoaded()
+	{
+		GameObject umbraInitializer = new GameObject("Umbra Initializer");
+		umbraInitializerCamera = umbraInitializer.AddComponent<Camera>();
+	}
+#endif
+
 	private void OnDestroy()
 	{
 #if UNITY_ANDROID && !UNITY_EDITOR
@@ -730,6 +775,15 @@ public class OVRManager : MonoBehaviour
 	{
 		if (!isVRPresent)
 			return;
+
+#if !UNITY_ANDROID || UNITY_EDITOR
+		paused = !OVRPlugin.hasVrFocus;
+		if (OVRPlugin.shouldQuit)
+			Application.Quit();
+
+		if (OVRPlugin.shouldRecenter)
+			OVRManager.display.RecenterPose();
+#endif
 
 		if (!usingPositionTrackingCached || usingPositionTracking != usePositionTracking)
 		{
@@ -877,6 +931,11 @@ public class OVRManager : MonoBehaviour
 
 			if (isVRPresent)
 				display.EndFrame();
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+			if (umbraInitializerCamera != null)
+				GameObject.Destroy(umbraInitializerCamera.gameObject);
+#endif
         }
 	}
 	

@@ -1,15 +1,15 @@
-﻿/************************************************************************************
+/************************************************************************************
 
 Copyright   :   Copyright 2014 Oculus VR, LLC. All Rights reserved.
 
-Licensed under the Oculus VR Rift SDK License Version 3.2 (the "License");
+Licensed under the Oculus VR Rift SDK License Version 3.3 (the "License");
 you may not use the Oculus VR Rift SDK except in compliance with the License,
 which is provided at the time of installation or download, or which
 otherwise accompanies this software in either electronic or hard copy form.
 
 You may obtain a copy of the License at
 
-http://www.oculusvr.com/licenses/LICENSE-3.2
+http://www.oculus.com/licenses/LICENSE-3.3
 
 Unless required by applicable law or agreed to in writing, the Oculus VR SDK
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -32,6 +32,8 @@ class OVRMoonlightLoader
 {
     static OVRMoonlightLoader()
 	{
+		EnforceInputManagerBindings();
+
 		if (EditorUserBuildSettings.activeBuildTarget != BuildTarget.Android)
 			return;
 
@@ -60,4 +62,82 @@ class OVRMoonlightLoader
 			QualitySettings.vSyncCount = 0;
 		}
 	}
+
+	private static void EnforceInputManagerBindings()
+	{
+		try
+		{
+			BindAxis(new Axis() { name = "Oculus_GearVR_LThumbstickX",  axis =  0,               });
+			BindAxis(new Axis() { name = "Oculus_GearVR_LThumbstickY",  axis =  1, invert = true });
+			BindAxis(new Axis() { name = "Oculus_GearVR_RThumbstickX",  axis =  2,               });
+			BindAxis(new Axis() { name = "Oculus_GearVR_RThumbstickY",  axis =  3, invert = true });
+			BindAxis(new Axis() { name = "Oculus_GearVR_DpadX",         axis =  4,               });
+			BindAxis(new Axis() { name = "Oculus_GearVR_DpadY",         axis =  5, invert = true });
+			BindAxis(new Axis() { name = "Oculus_GearVR_LIndexTrigger", axis = 12,               });
+			BindAxis(new Axis() { name = "Oculus_GearVR_RIndexTrigger", axis = 11,               });
+		}
+		catch
+		{
+			Debug.LogError("Failed to apply Oculus GearVR input manager bindings.");
+		}
+	}
+
+	private class Axis
+	{
+		public string name = String.Empty;
+		public string descriptiveName = String.Empty;
+		public string descriptiveNegativeName = String.Empty;
+		public string negativeButton = String.Empty;
+		public string positiveButton = String.Empty;
+		public string altNegativeButton = String.Empty;
+		public string altPositiveButton = String.Empty;
+		public float gravity = 0.0f;
+		public float dead = 0.001f;
+		public float sensitivity = 1.0f;
+		public bool snap = false;
+		public bool invert = false;
+		public int type = 2;
+		public int axis = 0;
+		public int joyNum = 0;
+	}
+
+	private static void BindAxis(Axis axis)
+	{
+		SerializedObject serializedObject = new SerializedObject(AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/InputManager.asset")[0]);
+		SerializedProperty axesProperty = serializedObject.FindProperty("m_Axes");
+
+		SerializedProperty axisIter = axesProperty.Copy();
+		axisIter.Next(true);
+		axisIter.Next(true);
+		while (axisIter.Next(false))
+		{
+			if (axisIter.FindPropertyRelative("m_Name").stringValue == axis.name)
+			{
+				// Axis already exists. Don't create binding.
+				return;
+			}
+		}
+
+		axesProperty.arraySize++;
+		serializedObject.ApplyModifiedProperties();
+
+		SerializedProperty axisProperty = axesProperty.GetArrayElementAtIndex(axesProperty.arraySize - 1);
+		axisProperty.FindPropertyRelative("m_Name").stringValue = axis.name;
+		axisProperty.FindPropertyRelative("descriptiveName").stringValue = axis.descriptiveName;
+		axisProperty.FindPropertyRelative("descriptiveNegativeName").stringValue = axis.descriptiveNegativeName;
+		axisProperty.FindPropertyRelative("negativeButton").stringValue = axis.negativeButton;
+		axisProperty.FindPropertyRelative("positiveButton").stringValue = axis.positiveButton;
+		axisProperty.FindPropertyRelative("altNegativeButton").stringValue = axis.altNegativeButton;
+		axisProperty.FindPropertyRelative("altPositiveButton").stringValue = axis.altPositiveButton;
+		axisProperty.FindPropertyRelative("gravity").floatValue = axis.gravity;
+		axisProperty.FindPropertyRelative("dead").floatValue = axis.dead;
+		axisProperty.FindPropertyRelative("sensitivity").floatValue = axis.sensitivity;
+		axisProperty.FindPropertyRelative("snap").boolValue = axis.snap;
+		axisProperty.FindPropertyRelative("invert").boolValue = axis.invert;
+		axisProperty.FindPropertyRelative("type").intValue = axis.type;
+		axisProperty.FindPropertyRelative("axis").intValue = axis.axis;
+		axisProperty.FindPropertyRelative("joyNum").intValue = axis.joyNum;
+		serializedObject.ApplyModifiedProperties();
+	}
 }
+

@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections;
 using UnityEngine;
 
 
@@ -8,7 +7,6 @@ public class GameManagerBase : MonoBehaviour
 {
 	# region fields
 
-		public bool hasRecentered { get; private set; }
 		public bool isGameStarted { get; private set; }
 
 		bool showingRecenterMessage;
@@ -35,8 +33,6 @@ public class GameManagerBase : MonoBehaviour
 			Screen.showCursor = false;
 			Screen.lockCursor = true;
 		}
-
-		OVRManager.instance.usePositionTracking = false;
 	}
 
 
@@ -93,6 +89,7 @@ public class GameManagerBase : MonoBehaviour
 	void Start()
 	{
 		Singletons.player.SetToDark();
+		FadeIn( duration: 2, then: StartGame );
 	}
 
 
@@ -106,53 +103,18 @@ public class GameManagerBase : MonoBehaviour
 
 
 
-	IEnumerator ResetAndStartGameNextFrame()
-	{
-		yield return null;
-
-		ResetOVR();
-		OVRManager.instance.usePositionTracking = true;
-		FadeIn( duration: 2, then: StartGame );
-	}
-
-
-
 	protected virtual void Update()
 	{
-		bool isHSWShowing = OVRManager.isHSWDisplayed;
-
 		if (Input.GetKeyDown(KeyCode.Escape))
 			Application.Quit();
-		else if (Input.anyKeyDown && isHSWShowing)
-			OVRManager.DismissHSWDisplay();
 
 		if ( fadeState == FadeState.FadingIn || fadeState == FadeState.FadingOut )
 			return;
 
-		if ( false == hasRecentered && false == isHSWShowing && false == showingRecenterMessage )
-		{
-			Singletons.guiManager.ShowMessage("Press F5 to recenter", 0, notificationMode:GUIManager.NotificationMode.FadeOut);
-			showingRecenterMessage = true;
-		}
-
-
 		//*** Check keyboard
 		{
 			if ( Input.GetKeyDown (KeyCode.F5))
-			{
-				if ( showingRecenterMessage )
-				{
-					if ( false == isHSWShowing && false == hasRecentered )
-					{
-						Singletons.guiManager.HideGUI();
-						showingRecenterMessage = false;
-						hasRecentered = true;
-						StartCoroutine(ResetAndStartGameNextFrame());
-					}
-				}
-				else
-					ResetOVR();
-			}
+				ResetOVR();
 
 			if ( isGameStarted )
 				CheckKeyboardForRunningGame();

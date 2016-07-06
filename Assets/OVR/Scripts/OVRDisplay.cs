@@ -2,14 +2,14 @@
 
 Copyright   :   Copyright 2014 Oculus VR, LLC. All Rights reserved.
 
-Licensed under the Oculus VR Rift SDK License Version 3.2 (the "License");
+Licensed under the Oculus VR Rift SDK License Version 3.3 (the "License");
 you may not use the Oculus VR Rift SDK except in compliance with the License,
 which is provided at the time of installation or download, or which
 otherwise accompanies this software in either electronic or hard copy form.
 
 You may obtain a copy of the License at
 
-http://www.oculusvr.com/licenses/LICENSE-3.2
+http://www.oculus.com/licenses/LICENSE-3.3
 
 Unless required by applicable law or agreed to in writing, the Oculus VR SDK
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -155,7 +155,7 @@ public class OVRDisplay
 			timeWarpViewNumber++;
 		}
 		
-		OVRPlugin.Update(timeWarpViewNumber);
+		OVR_Update(timeWarpViewNumber);
 
 		OVRPluginEvent.IssueWithData(RenderEventType.BeginFrame, timeWarpViewNumber);
 #endif
@@ -558,6 +558,9 @@ public class OVRDisplay
 				int leftEyeIndex = i + (int)OVREye.Left;
 				int rightEyeIndex = i + (int)OVREye.Right;
 
+                eyeTextures[leftEyeIndex].Create();
+                eyeTextures[rightEyeIndex].Create();
+
 				IntPtr leftEyeTexturePtr = eyeTextures[leftEyeIndex].GetNativeTexturePtr();
 				IntPtr rightEyeTexturePtr = eyeTextures[rightEyeIndex].GetNativeTexturePtr();
 
@@ -642,6 +645,10 @@ public class OVRDisplay
 		needsSetTexture = true;
 
 		needsConfigureTexture = false;
+
+#if !UNITY_ANDROID || UNITY_EDITOR
+		timeWarpViewNumber = OVR_GetFirstFrameID();
+#endif
 	}
 
     public void SetViewport(int x, int y, int w, int h)
@@ -693,5 +700,11 @@ public class OVRDisplay
 #else
 	[DllImport("OculusPlugin")]
 	private static extern bool OVR_SetEyeTexture(int eyeId, IntPtr texture);
+
+	[DllImport("OculusPlugin")]
+	private static extern bool OVR_Update(int frameIndex);
+
+	[DllImport("OculusPlugin")]
+	private static extern int OVR_GetFirstFrameID();
 #endif
 }

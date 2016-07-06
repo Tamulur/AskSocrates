@@ -2,14 +2,14 @@
 
 Copyright   :   Copyright 2014 Oculus VR, LLC. All Rights reserved.
 
-Licensed under the Oculus VR Rift SDK License Version 3.2 (the "License");
+Licensed under the Oculus VR Rift SDK License Version 3.3 (the "License");
 you may not use the Oculus VR Rift SDK except in compliance with the License,
 which is provided at the time of installation or download, or which
 otherwise accompanies this software in either electronic or hard copy form.
 
 You may obtain a copy of the License at
 
-http://www.oculusvr.com/licenses/LICENSE-3.2
+http://www.oculus.com/licenses/LICENSE-3.3
 
 Unless required by applicable law or agreed to in writing, the Oculus VR SDK
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -30,10 +30,94 @@ using System.Runtime.InteropServices;
 
 internal static class OVRPlugin
 {
-	public static System.Version wrapperVersion = new System.Version("0.1.1.0");
-	private static System.Version v0110 = new System.Version(0, 1, 1, 0);
-	private static System.Version v0120 = new System.Version(0, 1, 2, 0);
-	private static System.Version v0500 = new System.Version(0, 5, 0, 0);
+	public static readonly System.Version wrapperVersion = new System.Version(1, 2, 0);
+
+	private static System.Version _version;
+	public static System.Version version
+	{
+		get {
+			if (_version == null)
+			{
+				try
+				{
+					string pluginVersion = OVRP_0_1_0.ovrp_GetString(Key.Version);
+
+					if (pluginVersion != null)
+					{
+						_version = new System.Version(pluginVersion);
+					}
+					else
+					{
+						_version = new System.Version(0, 0, 0);
+					}
+				}
+				catch (DllNotFoundException)
+				{
+					_version = new System.Version(0, 0, 0);
+				}
+
+				// Unity 5.1.1f3-p3 have OVRPlugin version "0.5.0", which isn't accurate.
+				if (_version == OVRP_0_5_0.version)
+					_version = new System.Version(0, 1, 0);
+			}
+
+			return _version;
+		}
+	}
+
+	private static System.Version _nativeSDKVersion;
+	public static System.Version nativeSDKVersion
+	{
+		get {
+			if (_nativeSDKVersion == null)
+			{
+				try
+				{
+					string sdkVersion = string.Empty;
+
+					if (version >= OVRP_1_1_0.version)
+						sdkVersion = OVRP_1_1_0.ovrp_GetNativeSDKVersion();
+					else if (version >= OVRP_0_1_2.version)
+						sdkVersion = OVRP_0_1_0.ovrp_GetString(Key.SDKVersion); // Key.SDKVersion added in OVRP 0.1.2
+					else
+						sdkVersion = "0.0.0";
+                                    
+					if (sdkVersion != null)
+					{
+						// Truncate unsupported trailing version info for System.Version. Original string is returned if not present.
+						sdkVersion = sdkVersion.Split('-')[0];
+						_nativeSDKVersion = new System.Version(sdkVersion);
+					}
+					else
+					{
+						_nativeSDKVersion = new System.Version(0, 0, 0);
+					}
+				}
+				catch
+				{
+					_nativeSDKVersion = new System.Version(0, 0, 0);
+				}
+			}
+
+			return _nativeSDKVersion;
+		}
+	}
+
+	[StructLayout(LayoutKind.Sequential)]
+	private struct GUID
+	{
+		public int a;
+		public short b;
+		public short c;
+		public byte d0;
+		public byte d1;
+		public byte d2;
+		public byte d3;
+		public byte d4;
+		public byte d5;
+		public byte d6;
+		public byte d7;
+	}
 
 	private enum Bool
 	{
@@ -51,19 +135,36 @@ internal static class OVRPlugin
 
 	public enum Tracker
 	{
-		Default = 0,
+		None   = -1,
+		Zero   = 0,
+		One    = 1,
 		Count,
 	}
 
 	public enum Node
 	{
 		None           = -1,
-		LeftEye        = 0,
-		RightEye       = 1,
-		CenterEye      = 2,
-		LeftHand       = 3,
-		RightHand      = 4,
-		TrackerDefault = 5,
+		EyeLeft        = 0,
+		EyeRight       = 1,
+		EyeCenter      = 2,
+		HandLeft       = 3,
+		HandRight      = 4,
+		TrackerZero    = 5,
+		TrackerOne     = 6,
+		Count,
+	}
+
+	public enum TrackingOrigin
+	{
+		EyeLevel       = 0,
+		FloorLevel     = 1,
+		Count,
+	}
+
+	public enum RecenterFlags
+	{
+		Default        = 0,
+		IgnoreAll      = unchecked((int)0x80000000),
 		Count,
 	}
 
@@ -99,6 +200,7 @@ internal static class OVRPlugin
 		NativeTextureScale,
 		VirtualTextureScale,
         Frequency,
+		SDKVersion,
     }
 
 	private enum Caps
@@ -125,6 +227,9 @@ internal static class OVRPlugin
 		Initialized,
 		HMDPresent,
 		UserPresent,
+		HasVrFocus,
+		ShouldQuit,
+		ShouldRecenter,
 	}
 
 	[StructLayout(LayoutKind.Sequential)]
@@ -166,9 +271,9 @@ internal static class OVRPlugin
 	}
 
 	[StructLayout(LayoutKind.Sequential)]
-	public struct InputState
+	internal struct InputState
 	{
-		public uint ConnectedControllerTypes;
+		public uint ConnectedControllers;
 		public uint Buttons;
 		public uint Touches;
 		public uint NearTouches;
@@ -178,6 +283,36 @@ internal static class OVRPlugin
 		public float RHandTrigger;
 		public Vector2f LThumbstick;
 		public Vector2f RThumbstick;
+	}
+
+	[StructLayout(LayoutKind.Sequential)]
+	public struct ControllerState
+	{
+		public uint ConnectedControllers;
+		public uint Buttons;
+		public uint Touches;
+		public uint NearTouches;
+		public float LIndexTrigger;
+		public float RIndexTrigger;
+		public float LHandTrigger;
+		public float RHandTrigger;
+		public Vector2f LThumbstick;
+		public Vector2f RThumbstick;
+
+		// maintain backwards compat for OVRP_0_1_2.ovrp_GetInputState()
+		internal ControllerState(InputState inputState)
+		{
+			ConnectedControllers = inputState.ConnectedControllers;
+			Buttons              = inputState.Buttons;
+			Touches              = inputState.Touches;
+			NearTouches          = inputState.NearTouches;
+			LIndexTrigger        = inputState.LIndexTrigger;
+			RIndexTrigger        = inputState.RIndexTrigger;
+			LHandTrigger         = inputState.LHandTrigger;
+			RHandTrigger         = inputState.RHandTrigger;
+			LThumbstick          = inputState.LThumbstick;
+			RThumbstick          = inputState.RThumbstick;
+		}
 	}
 
 	[StructLayout(LayoutKind.Sequential)]
@@ -196,40 +331,20 @@ internal static class OVRPlugin
 		public float fovY;
 	}
 
-	public static bool srgb
+	public static bool initialized
 	{
-		get { return GetCap(Caps.SRGB); }
-		set { SetCap(Caps.SRGB, value); }
+		get {
+			if (version >= OVRP_1_1_0.version)
+				return OVRP_1_1_0.ovrp_GetInitialized() == OVRPlugin.Bool.True;
+			else
+				return GetStatus(Status.Initialized);
+		}
 	}
 
 	public static bool chromatic
 	{
 		get { return GetCap(Caps.Chromatic); }
 		set { SetCap(Caps.Chromatic, value); }
-	}
-
-	public static bool flipInput
-	{
-		get { return GetCap(Caps.FlipInput); }
-		set { SetCap(Caps.FlipInput, value); }
-	}
-
-	public static bool rotation
-	{
-		get { return GetCap(Caps.Rotation); }
-		set { SetCap(Caps.Rotation, value); }
-	}
-
-	public static bool headModel
-	{
-		get { return GetCap(Caps.HeadModel); }
-		set { SetCap(Caps.HeadModel, value); }
-	}
-
-	public static bool position
-	{
-		get { return GetCap(Caps.Position); }
-		set { SetCap(Caps.Position, value); }
 	}
 
 	public static bool collectPerf
@@ -246,15 +361,33 @@ internal static class OVRPlugin
 
 	public static bool monoscopic
 	{
-		get { return GetCap(Caps.Monoscopic); }
-		set { SetCap(Caps.Monoscopic, value); }
+		get {
+			if (version >= OVRP_1_1_0.version)
+				return OVRP_1_1_0.ovrp_GetAppMonoscopic() == OVRPlugin.Bool.True;
+			else
+				return GetCap(Caps.Monoscopic);
+		}
+		set {
+			if (version >= OVRP_1_1_0.version)
+				OVRP_1_1_0.ovrp_SetAppMonoscopic(ToBool(value));
+			else
+				SetCap(Caps.Monoscopic, value);
+		}
 	}
 
-	public static bool debug { get { return GetStatus(Status.Debug); } }
-
-	public static bool userPresent { get { return true; /*TODO return GetStatus(Status.UserPresent);*/ } }
-
 	public static bool hswVisible { get { return GetStatus(Status.HSWVisible); } }
+
+	public static bool rotation
+	{
+		get { return GetCap(Caps.Rotation); }
+		set { SetCap(Caps.Rotation, value); }
+	}
+
+	public static bool position
+	{
+		get { return GetCap(Caps.Position); }
+		set { SetCap(Caps.Position, value); }
+	}
 
 	public static bool positionSupported { get { return GetStatus(Status.PositionSupported); } }
 
@@ -262,89 +395,197 @@ internal static class OVRPlugin
 
 	public static bool powerSaving { get { return GetStatus(Status.PowerSaving); } }
 
-	public static System.Version version
+	public static bool hmdPresent { get { return GetStatus(Status.HMDPresent); } }
+
+	public static bool userPresent { get { return GetStatus(Status.UserPresent); } }
+
+	public static bool headphonesPresent
 	{
 		get {
-			if (_version == null)
-			{
-				try {
-					_version = new System.Version(OVRP0100.ovrp_GetString(Key.Version));
-				} catch {
-					_version = new System.Version(0, 0, 0, 0);
-				}
-			}
-
-			// Unity 5.1.1f3-p3 have OVRPlugin version "0.5.0", which isn't accurate.
-			if (_version == v0500)
-				_version = new System.Version(0, 1, 0, 0);
-
-			return _version;
+			if (version >= OVRP_1_1_0.version)
+				return OVRP_1_1_0.ovrp_GetHeadphonesPresent() == OVRPlugin.Bool.True;
+			return true;
 		}
 	}
-	private static System.Version _version;
 
-	public static string productName { get { return OVRP0100.ovrp_GetString(Key.ProductName); } }
+	private static Guid _cachedAudioOutGuid;
+	private static string _cachedAudioOutString;
+	public static string audioOutId
+	{
+		get
+		{
+			if (version >= OVRP_1_1_0.version)
+			{
+				try
+				{
+					IntPtr ptr = OVRP_1_1_0.ovrp_GetAudioOutId();
+					if (ptr != IntPtr.Zero)
+					{
+						GUID nativeGuid = (GUID)Marshal.PtrToStructure(ptr, typeof(OVRPlugin.GUID));
+						Guid managedGuid = new Guid(
+								nativeGuid.a,
+								nativeGuid.b,
+								nativeGuid.c,
+								nativeGuid.d0,
+								nativeGuid.d1,
+								nativeGuid.d2,
+								nativeGuid.d3,
+								nativeGuid.d4,
+								nativeGuid.d5,
+								nativeGuid.d6,
+								nativeGuid.d7);
 
-	public static string latency { get { return OVRP0100.ovrp_GetString(Key.Latency); } }
+						if (managedGuid != _cachedAudioOutGuid)
+						{
+							_cachedAudioOutGuid = managedGuid;
+							_cachedAudioOutString = _cachedAudioOutGuid.ToString();
+						}
+
+						return _cachedAudioOutString;
+					}
+				}
+				catch
+				{
+					return string.Empty;
+				}
+			}
+			return string.Empty;
+		}
+	}
+
+	private static Guid _cachedAudioInGuid;
+	private static string _cachedAudioInString;
+	public static string audioInId
+	{
+		get
+		{
+			if (version >= OVRP_1_1_0.version)
+			{
+				try
+				{
+					IntPtr ptr = OVRP_1_1_0.ovrp_GetAudioInId();
+					if (ptr != IntPtr.Zero)
+					{
+						GUID nativeGuid = (GUID)Marshal.PtrToStructure(ptr, typeof(OVRPlugin.GUID));
+						Guid managedGuid = new Guid(
+								nativeGuid.a,
+								nativeGuid.b,
+								nativeGuid.c,
+								nativeGuid.d0,
+								nativeGuid.d1,
+								nativeGuid.d2,
+								nativeGuid.d3,
+								nativeGuid.d4,
+								nativeGuid.d5,
+								nativeGuid.d6,
+								nativeGuid.d7);
+
+						if (managedGuid != _cachedAudioInGuid)
+						{
+							_cachedAudioInGuid = managedGuid;
+							_cachedAudioInString = _cachedAudioInGuid.ToString();
+						}
+
+						return _cachedAudioInString;
+					}
+				}
+				catch
+				{
+					return string.Empty;
+				}
+			}
+			return string.Empty;
+		}
+	}
+
+	public static bool hasVrFocus { get { return GetStatus(Status.HasVrFocus); } }
+
+	public static bool shouldQuit { get { return GetStatus(Status.ShouldQuit); } }
+
+	public static bool shouldRecenter { get { return GetStatus(Status.ShouldRecenter); } }
+
+	public static string productName { get { return OVRP_0_1_0.ovrp_GetString(Key.ProductName); } }
+
+	public static string latency { get { return OVRP_0_1_0.ovrp_GetString(Key.Latency); } }
 
 	public static float eyeDepth
 	{
-		get { return OVRP0100.ovrp_GetFloat(Key.EyeDepth); }
-		set { OVRP0100.ovrp_SetFloat(Key.EyeDepth, value); }
+		get { return OVRP_0_1_0.ovrp_GetFloat(Key.EyeDepth); }
+		set { OVRP_0_1_0.ovrp_SetFloat(Key.EyeDepth, value); }
 	}
 
 	public static float eyeHeight
 	{
-		get { return OVRP0100.ovrp_GetFloat(Key.EyeHeight); }
-		set { OVRP0100.ovrp_SetFloat(Key.EyeHeight, value); }
+		get { return OVRP_0_1_0.ovrp_GetFloat(Key.EyeHeight); }
+		set { OVRP_0_1_0.ovrp_SetFloat(Key.EyeHeight, value); }
 	}
 
 	public static float batteryLevel
 	{
-		get { return OVRP0100.ovrp_GetFloat(Key.BatteryLevel); }
-		set { OVRP0100.ovrp_SetFloat(Key.BatteryLevel, value); }
+		get { return OVRP_0_1_0.ovrp_GetFloat(Key.BatteryLevel); }
 	}
 
 	public static float batteryTemperature
 	{
-		get { return OVRP0100.ovrp_GetFloat(Key.BatteryTemperature); }
-		set { OVRP0100.ovrp_SetFloat(Key.BatteryTemperature, value); }
+		get { return OVRP_0_1_0.ovrp_GetFloat(Key.BatteryTemperature); }
 	}
 
 	public static int cpuLevel
 	{
-		get { return (int)OVRP0100.ovrp_GetFloat(Key.CpuLevel); }
-		set { OVRP0100.ovrp_SetFloat(Key.CpuLevel, (float)value); }
+		get { return (int)OVRP_0_1_0.ovrp_GetFloat(Key.CpuLevel); }
+		set { OVRP_0_1_0.ovrp_SetFloat(Key.CpuLevel, (float)value); }
 	}
 
 	public static int gpuLevel
 	{
-		get { return (int)OVRP0100.ovrp_GetFloat(Key.GpuLevel); }
-		set { OVRP0100.ovrp_SetFloat(Key.GpuLevel, (float)value); }
+		get { return (int)OVRP_0_1_0.ovrp_GetFloat(Key.GpuLevel); }
+		set { OVRP_0_1_0.ovrp_SetFloat(Key.GpuLevel, (float)value); }
+	}
+
+	public static int vsyncCount
+	{
+		get {
+			if (version >= OVRP_1_1_0.version)
+				return OVRP_1_1_0.ovrp_GetSystemVSyncCount();
+			return 1;
+		}
+		set {
+			if (version >= OVRP_1_2_0.version)
+				OVRP_1_2_0.ovrp_SetSystemVSyncCount(value);
+		}
 	}
 
 	public static float systemVolume
 	{
-		get { return OVRP0100.ovrp_GetFloat(Key.SystemVolume); }
-		set { OVRP0100.ovrp_SetFloat(Key.SystemVolume, value); }
+		get { return OVRP_0_1_0.ovrp_GetFloat(Key.SystemVolume); }
 	}
 
 	public static float queueAheadFraction
 	{
-		get { return OVRP0100.ovrp_GetFloat(Key.QueueAheadFraction); }
-		set { OVRP0100.ovrp_SetFloat(Key.QueueAheadFraction, value); }
+		get { return OVRP_0_1_0.ovrp_GetFloat(Key.QueueAheadFraction); }
+		set { OVRP_0_1_0.ovrp_SetFloat(Key.QueueAheadFraction, value); }
 	}
 
 	public static float ipd
 	{
-		get { return OVRP0100.ovrp_GetFloat(Key.IPD); }
-		set { OVRP0100.ovrp_SetFloat(Key.IPD, value); }
+		get { return OVRP_0_1_0.ovrp_GetFloat(Key.IPD); }
+		set { OVRP_0_1_0.ovrp_SetFloat(Key.IPD, value); }
 	}
 
 #if OVR_LEGACY
-	public static bool initialized { get { return GetStatus(Status.Initialized); } }
+	public static bool srgb
+	{
+		get { return GetCap(Caps.SRGB); }
+		set { SetCap(Caps.SRGB, value); }
+	}
 
-	public static bool hmdPresent { get { return GetStatus(Status.HMDPresent); } }
+	public static bool flipInput
+	{
+		get { return GetCap(Caps.FlipInput); }
+		set { SetCap(Caps.FlipInput, value); }
+	}
+
+	public static bool debug { get { return GetStatus(Status.Debug); } }
 
 	public static bool shareTexture
 	{
@@ -354,77 +595,125 @@ internal static class OVRPlugin
 
 	public static float nativeTextureScale
 	{
-		get { return OVRP0100.ovrp_GetFloat(Key.NativeTextureScale); }
-		set { OVRP0100.ovrp_SetFloat(Key.NativeTextureScale, value); }
+		get { return OVRP_0_1_0.ovrp_GetFloat(Key.NativeTextureScale); }
+		set { OVRP_0_1_0.ovrp_SetFloat(Key.NativeTextureScale, value); }
 	}
 
 	public static float virtualTextureScale
 	{
-		get { return OVRP0100.ovrp_GetFloat(Key.VirtualTextureScale); }
-		set { OVRP0100.ovrp_SetFloat(Key.VirtualTextureScale, value); }
+		get { return OVRP_0_1_0.ovrp_GetFloat(Key.VirtualTextureScale); }
+		set { OVRP_0_1_0.ovrp_SetFloat(Key.VirtualTextureScale, value); }
 	}
 #endif
 
 	public static BatteryStatus batteryStatus
 	{
-		get { return OVRP0100.ovrp_GetBatteryStatus(); }
+		get { return OVRP_0_1_0.ovrp_GetBatteryStatus(); }
 	}
 
-	public static Posef GetEyeVelocity(Eye eyeId) { return OVRP0100.ovrp_GetEyeVelocity(eyeId); }
-	public static Posef GetEyeAcceleration(Eye eyeId) { return OVRP0100.ovrp_GetEyeAcceleration(eyeId); }
-	public static Frustumf GetEyeFrustum(Eye eyeId) { return OVRP0100.ovrp_GetEyeFrustum(eyeId); }
-	public static Sizei GetEyeTextureSize(Eye eyeId) { return OVRP0100.ovrp_GetEyeTextureSize(eyeId); }
-	public static Posef GetTrackerPose(Tracker trackerId) { return OVRP0100.ovrp_GetTrackerPose(trackerId); }
-	public static Frustumf GetTrackerFrustum(Tracker trackerId) { return OVRP0100.ovrp_GetTrackerFrustum(trackerId); }
-	public static bool DismissHSW() { return OVRP0100.ovrp_DismissHSW() == Bool.True; }
-	public static bool ShowUI(PlatformUI ui) { return OVRP0100.ovrp_ShowUI(ui) == Bool.True; }
+	public static Posef GetEyeVelocity(Eye eyeId) { return OVRP_0_1_0.ovrp_GetEyeVelocity(eyeId); }
+	public static Posef GetEyeAcceleration(Eye eyeId) { return OVRP_0_1_0.ovrp_GetEyeAcceleration(eyeId); }
+	public static Frustumf GetEyeFrustum(Eye eyeId) { return OVRP_0_1_0.ovrp_GetEyeFrustum(eyeId); }
+	public static Sizei GetEyeTextureSize(Eye eyeId) { return OVRP_0_1_0.ovrp_GetEyeTextureSize(eyeId); }
+	public static Posef GetTrackerPose(Tracker trackerId) { return OVRP_0_1_0.ovrp_GetTrackerPose(trackerId); }
+	public static Frustumf GetTrackerFrustum(Tracker trackerId) { return OVRP_0_1_0.ovrp_GetTrackerFrustum(trackerId); }
+	public static bool DismissHSW() { return OVRP_0_1_0.ovrp_DismissHSW() == Bool.True; }
+	public static bool ShowUI(PlatformUI ui) { return OVRP_0_1_0.ovrp_ShowUI(ui) == Bool.True; }
 	public static bool SetOverlayQuad(bool onTop, bool headLocked, IntPtr texture, IntPtr device, Posef pose, Vector3f scale)
 	{
-		if (version >= v0110)
-			return OVRP0110.ovrp_SetOverlayQuad2(ToBool(onTop), ToBool(headLocked), texture, device, pose, scale) == Bool.True;
+		if (version >= OVRP_0_1_1.version)
+			return OVRP_0_1_1.ovrp_SetOverlayQuad2(ToBool(onTop), ToBool(headLocked), texture, device, pose, scale) == Bool.True;
 		else
-			return OVRP0100.ovrp_SetOverlayQuad(ToBool(onTop), texture, device, pose, scale) == Bool.True;
+			return OVRP_0_1_0.ovrp_SetOverlayQuad(ToBool(onTop), texture, device, pose, scale) == Bool.True;
 	}
 
 	public static Posef GetNodePose(Node nodeId)
 	{
-		if (version >= v0120)
-			return OVRP0120.ovrp_GetNodePose(nodeId);
+		if (version >= OVRP_0_1_2.version)
+			return OVRP_0_1_2.ovrp_GetNodePose(nodeId);
 		else
 			return new Posef();
 	}
 
-	public static InputState GetInputState(uint controllerMask)
+	public static Posef GetNodeVelocity(Node nodeId)
 	{
-		if (version >= v0120)
-			return OVRP0120.ovrp_GetInputState(controllerMask);
+		if (version >= OVRP_0_1_3.version)
+			return OVRP_0_1_3.ovrp_GetNodeVelocity(nodeId);
 		else
-			return new InputState();
+			return new Posef();
+	}
+
+	public static Posef GetNodeAcceleration(Node nodeId)
+	{
+		if (version >= OVRP_0_1_3.version)
+			return OVRP_0_1_3.ovrp_GetNodeAcceleration(nodeId);
+		else
+			return new Posef();
+	}
+
+	public static bool GetNodePresent(Node nodeId)
+	{
+		if (version >= OVRP_1_1_0.version)
+			return OVRP_1_1_0.ovrp_GetNodePresent(nodeId) == Bool.True;
+		else
+			return false;
+	}
+
+	public static bool GetNodeOrientationTracked(Node nodeId)
+	{
+		if (version >= OVRP_1_1_0.version)
+			return OVRP_1_1_0.ovrp_GetNodeOrientationTracked(nodeId) == Bool.True;
+		else
+			return false;
+	}
+
+	public static bool GetNodePositionTracked(Node nodeId)
+	{
+		if (version >= OVRP_1_1_0.version)
+			return OVRP_1_1_0.ovrp_GetNodePositionTracked(nodeId) == Bool.True;
+		else
+			return false;
+	}
+
+	public static ControllerState GetControllerState(uint controllerMask)
+	{
+		if (version >= OVRP_1_1_0.version)
+			return OVRP_1_1_0.ovrp_GetControllerState(controllerMask);
+		else if (version >= OVRP_0_1_2.version)
+			return new ControllerState(OVRP_0_1_2.ovrp_GetInputState(controllerMask));
+		else
+			return new ControllerState();
 	}
 
 	public static bool SetControllerVibration(uint controllerMask, float frequency, float amplitude)
 	{
-		if (version >= v0120)
-			return OVRP0120.ovrp_SetControllerVibration(controllerMask, frequency, amplitude) == Bool.True;
+		if (version >= OVRP_0_1_2.version)
+			return OVRP_0_1_2.ovrp_SetControllerVibration(controllerMask, frequency, amplitude) == Bool.True;
 		else
 			return false;
 	}
 
 #if OVR_LEGACY
-	public static bool Update(int frameIndex) { return OVRP0100.ovrp_Update(frameIndex) == Bool.True; }
-	public static IntPtr GetNativePointer() { return OVRP0100.ovrp_GetNativePointer(); }
-	public static Posef GetEyePose(Eye eyeId) { return OVRP0100.ovrp_GetEyePose(eyeId); }
-	public static bool RecenterPose() { return OVRP0100.ovrp_RecenterPose() == Bool.True; }
+	public static bool Update(int frameIndex) { return OVRP_0_1_0.ovrp_Update(frameIndex) == Bool.True; }
+	public static IntPtr GetNativePointer() { return OVRP_0_1_0.ovrp_GetNativePointer(); }
+	public static Posef GetEyePose(Eye eyeId) { return OVRP_0_1_0.ovrp_GetEyePose(eyeId); }
+	public static bool RecenterPose() { return OVRP_0_1_0.ovrp_RecenterPose() == Bool.True; }
 #endif
 
 	private static bool GetStatus(Status bit)
 	{
-		return OVRP0100.ovrp_GetStatus2((uint)(1 << (int)bit)) != 0;
+		if (version >= OVRP_0_1_2.version)
+			return OVRP_0_1_2.ovrp_GetStatus2((uint)(1 << (int)bit)) != 0;
+		else
+			return (OVRP_0_1_0.ovrp_GetStatus() & (uint)(1 << (int)bit)) != 0;
 	}
 
 	private static bool GetCap(Caps cap)
 	{
-		return ((int)OVRP0100.ovrp_GetCaps() & (1 << (int)cap)) != 0;
+		if (version >= OVRP_0_1_3.version)
+			return OVRP_0_1_3.ovrp_GetCaps2((uint)(1 << (int)cap)) != 0;
+		else
+			return ((int)OVRP_0_1_0.ovrp_GetCaps() & (1 << (int)cap)) != 0;
 	}
 
 	private static void SetCap(Caps cap, bool value)
@@ -432,13 +721,13 @@ internal static class OVRPlugin
 		if (GetCap(cap) == value)
 			return;
 
-		int caps = (int)OVRP0100.ovrp_GetCaps();
+		int caps = (int)OVRP_0_1_0.ovrp_GetCaps();
 		if (value)
 			caps |= (1 << (int)cap);
 		else
 			caps &= ~(1 << (int)cap);
 
-		OVRP0100.ovrp_SetCaps((Caps)caps);
+		OVRP_0_1_0.ovrp_SetCaps((Caps)caps);
 	}
 
 	private static Bool ToBool(bool b)
@@ -446,10 +735,52 @@ internal static class OVRPlugin
 		return (b) ? OVRPlugin.Bool.True : OVRPlugin.Bool.False;
 	}
 
-		private const string pluginName = "OVRPlugin";
-
-	private static class OVRP0100
+	public static TrackingOrigin GetTrackingOriginType()
 	{
+		if (version >= OVRP_1_0_0.version)
+			return OVRP_1_0_0.ovrp_GetTrackingOriginType();
+		else
+			return TrackingOrigin.EyeLevel;
+	}
+
+	public static bool SetTrackingOriginType(TrackingOrigin originType)
+	{
+		if (version >= OVRP_1_0_0.version)
+			return OVRP_1_0_0.ovrp_SetTrackingOriginType(originType) == Bool.True;
+		else
+			return false;
+	}
+
+	public static Posef GetTrackingCalibratedOrigin()
+	{
+		if (version >= OVRP_1_0_0.version)
+			return OVRP_1_0_0.ovrp_GetTrackingCalibratedOrigin();
+		else
+			return new Posef();
+	}
+
+	public static bool SetTrackingCalibratedOrigin()
+	{
+		if (version >= OVRP_1_2_0.version)
+			return OVRP_1_2_0.ovrpi_SetTrackingCalibratedOrigin() == Bool.True;
+		else
+			return false;
+	}
+
+	public static bool RecenterTrackingOrigin(RecenterFlags flags)
+	{
+		if (version >= OVRP_1_0_0.version)
+			return OVRP_1_0_0.ovrp_RecenterTrackingOrigin((uint)flags) == Bool.True;
+		else
+			return false;
+	}
+
+	private const string pluginName = "OVRPlugin";
+
+	private static class OVRP_0_1_0
+	{
+		public static readonly System.Version version = new System.Version(0, 1, 0);
+
 		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
 		public static extern Posef ovrp_GetEyeVelocity(Eye eyeId);
 
@@ -478,7 +809,7 @@ internal static class OVRPlugin
 		public static extern Bool ovrp_SetCaps(Caps caps);
 
 		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
-		public static extern uint ovrp_GetStatus2(uint query);
+		public static extern uint ovrp_GetStatus();
 
 		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
 		public static extern float ovrp_GetFloat(Key key);
@@ -500,44 +831,11 @@ internal static class OVRPlugin
 		public static string ovrp_GetString(Key key) { return Marshal.PtrToStringAnsi(_ovrp_GetString(key)); }
 
 #if OVR_LEGACY
-		//[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
-		//public static extern Bool ovrp_PreInitialize();
-
-		//[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
-		//public static extern Bool ovrp_Initialize(RenderAPIType apiType, IntPtr platformArgs);
-
-		//[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
-		//public static extern Bool ovrp_Shutdown();
-
-		//[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
-		//public static extern Bool ovrp_SetupDistortionWindow();
-
-		//[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
-		//public static extern Bool ovrp_DestroyDistortionWindow();
-
-		//[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
-		//public static extern Bool ovrp_RecreateEyeTexture(Eye eyeId, int stage, void* device, int height, int width, int samples, Bool isSRGB, void* result);
-		
-		//[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
-		//public static extern Bool ovrp_SetEyeTexture(Eye eyeId, IntPtr texture);
-
 		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
 		public static extern Bool ovrp_Update(int frameIndex);
 
-		//[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
-		//public static extern Bool ovrp_BeginFrame(int frameIndex);
-
-		//[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
-		//public static extern Bool ovrp_EndEye(Eye eye);
-
-		//[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
-		//public static extern Bool ovrp_EndFrame(int frameIndex);
-
 		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
 		public static extern IntPtr ovrp_GetNativePointer();
-		
-		//[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
-		//public static extern int ovrp_GetBufferCount();
 		
 		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
 		public static extern Posef ovrp_GetEyePose(Eye eyeId);
@@ -547,14 +845,21 @@ internal static class OVRPlugin
 #endif
 	}
 
-	private static class OVRP0110
+	private static class OVRP_0_1_1
 	{
+		public static readonly System.Version version = new System.Version(0, 1, 1);
+
 		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
 		public static extern Bool ovrp_SetOverlayQuad2(Bool onTop, Bool headLocked, IntPtr texture, IntPtr device, Posef pose, Vector3f scale);
 	}
 
-	private static class OVRP0120
+	private static class OVRP_0_1_2
 	{
+		public static readonly System.Version version = new System.Version(0, 1, 2);
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern uint ovrp_GetStatus2(uint query);
+
 		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
 		public static extern Posef ovrp_GetNodePose(Node nodeId);
 
@@ -563,5 +868,199 @@ internal static class OVRPlugin
 
 		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
 		public static extern Bool ovrp_SetControllerVibration(uint controllerMask, float frequency, float amplitude);
+	}
+
+	private static class OVRP_0_1_3
+	{
+		public static readonly System.Version version = new System.Version(0, 1, 3);
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern uint ovrp_GetCaps2(uint query);
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern Posef ovrp_GetNodeVelocity(Node nodeId);
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern Posef ovrp_GetNodeAcceleration(Node nodeId);
+	}
+
+	private static class OVRP_0_5_0
+	{
+		public static readonly System.Version version = new System.Version(0, 5, 0);
+	}
+
+	private static class OVRP_1_0_0
+	{
+		public static readonly System.Version version = new System.Version(1, 0, 0);
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern TrackingOrigin ovrp_GetTrackingOriginType();
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern Bool ovrp_SetTrackingOriginType(TrackingOrigin originType);
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern Posef ovrp_GetTrackingCalibratedOrigin();
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern Bool ovrp_RecenterTrackingOrigin(uint flags);
+	}
+
+	private static class OVRP_1_1_0
+	{
+		public static readonly System.Version version = new System.Version(1, 1, 0);
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern Bool ovrp_GetInitialized();
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "ovrp_GetVersion")]
+		private static extern IntPtr _ovrp_GetVersion();
+		public static string ovrp_GetVersion() { return Marshal.PtrToStringAnsi(_ovrp_GetVersion()); }
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "ovrp_GetNativeSDKVersion")]
+		private static extern IntPtr _ovrp_GetNativeSDKVersion();
+		public static string ovrp_GetNativeSDKVersion() { return Marshal.PtrToStringAnsi(_ovrp_GetNativeSDKVersion()); }
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern IntPtr ovrp_GetAudioOutId();
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern IntPtr ovrp_GetAudioInId();
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern float ovrp_GetEyeTextureScale();
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern Bool ovrp_SetEyeTextureScale(float value);
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern Bool ovrp_GetTrackingOrientationSupported();
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern Bool ovrp_GetTrackingOrientationEnabled();
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern Bool ovrp_SetTrackingOrientationEnabled(Bool value);
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern Bool ovrp_GetTrackingPositionSupported();
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern Bool ovrp_GetTrackingPositionEnabled();
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern Bool ovrp_SetTrackingPositionEnabled(Bool value);
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern Bool ovrp_GetNodePresent(Node nodeId);
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern Bool ovrp_GetNodeOrientationTracked(Node nodeId);
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern Bool ovrp_GetNodePositionTracked(Node nodeId);
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern Frustumf ovrp_GetNodeFrustum(Node nodeId);
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern ControllerState ovrp_GetControllerState(uint controllerMask);
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern int ovrp_GetSystemCpuLevel();
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern Bool ovrp_SetSystemCpuLevel(int value);
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern int ovrp_GetSystemGpuLevel();
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern Bool ovrp_SetSystemGpuLevel(int value);
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern Bool ovrp_GetSystemPowerSavingMode();
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern float ovrp_GetSystemDisplayFrequency();
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern int ovrp_GetSystemVSyncCount();
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern Bool ovrp_SetSystemVSyncCount(int vsyncCount);
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern float ovrp_GetSystemVolume();
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern Bool ovrp_GetHeadphonesPresent();
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern BatteryStatus ovrp_GetSystemBatteryStatus();
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern float ovrp_GetSystemBatteryLevel();
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern float ovrp_GetSystemBatteryTemperature();
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "ovrp_GetSystemProductName")]
+		private static extern IntPtr _ovrp_GetSystemProductName();
+		public static string ovrp_GetSystemProductName() { return Marshal.PtrToStringAnsi(_ovrp_GetSystemProductName()); }
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern Bool ovrp_ShowSystemUI(PlatformUI ui);
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern Bool ovrp_GetAppMonoscopic();
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern Bool ovrp_SetAppMonoscopic(Bool value);
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern Bool ovrp_GetAppHasVrFocus();
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern Bool ovrp_GetAppShouldQuit();
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern Bool ovrp_GetAppShouldRecenter();
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "ovrp_GetAppLatencyTimings")]
+		private static extern IntPtr _ovrp_GetAppLatencyTimings();
+		public static string ovrp_GetAppLatencyTimings() { return Marshal.PtrToStringAnsi(_ovrp_GetAppLatencyTimings()); }
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern Bool ovrp_GetUserPresent();
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern float ovrp_GetUserIPD();
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern Bool ovrp_SetUserIPD(float value);
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern float ovrp_GetUserEyeDepth();
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern Bool ovrp_SetUserEyeDepth(float value);
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern float ovrp_GetUserEyeHeight();
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern Bool ovrp_SetUserEyeHeight(float value);
+	}
+
+	private static class OVRP_1_2_0
+	{
+		public static readonly System.Version version = new System.Version(1, 2, 0);
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern Bool ovrp_SetSystemVSyncCount(int vsyncCount);
+
+		[DllImport(pluginName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern Bool ovrpi_SetTrackingCalibratedOrigin();
 	}
 }

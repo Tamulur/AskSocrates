@@ -10,7 +10,7 @@ May you be enlightened.
 
 
 By Tore Knabe
-http://tore-knabe.com/virtual-reality
+http://tamulur.com
 tamulur@yahoo.com
 
 
